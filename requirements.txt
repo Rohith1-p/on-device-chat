@@ -2,3 +2,9 @@ mlx-lm
 fastapi
 uvicorn
 
+
+langchain
+langchain-community
+sqlalchemy
+aiosqlite
+greenlet

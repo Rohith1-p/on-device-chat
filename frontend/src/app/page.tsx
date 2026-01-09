@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import ReactMarkdown from "react-markdown";
-import { Send, Menu, Plus, MessageSquare } from "lucide-react";
+import { Send, Menu, Plus, MessageSquare, MoreHorizontal, Trash2 } from "lucide-react";
 import clsx from "clsx";
 
 type Message = {
@@ -10,20 +10,106 @@ type Message = {
   content: string;
 };
 
+type Session = {
+  session_id: string;
+  last_message: string;
+};
+
 export default function Home() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [sessions, setSessions] = useState<Session[]>([]); // Store past sessions
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const sessionIdRef = useRef<string>("");
+  // Track which session has the menu open
+  const [openMenuSessionId, setOpenMenuSessionId] = useState<string | null>(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
 
+  // Fetch sessions on mount
+  const fetchSessions = async () => {
+    try {
+      const res = await fetch("http://localhost:8000/v1/sessions");
+      if (res.ok) {
+        const data = await res.json();
+        setSessions(data);
+      }
+    } catch (e) {
+      console.error("Failed to fetch sessions", e);
+    }
+  };
+
+  useEffect(() => {
+    // Generate session ID on mount if empty
+    if (!sessionIdRef.current) {
+      sessionIdRef.current = crypto.randomUUID();
+    }
+    fetchSessions(); // Load history list
+    scrollToBottom();
+
+    // Close menu on click outside
+    const handleClickOutside = () => setOpenMenuSessionId(null);
+    window.addEventListener("click", handleClickOutside);
+    return () => window.removeEventListener("click", handleClickOutside);
+  }, []); // Only run once on mount
+
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  const handleNewChat = () => {
+    sessionIdRef.current = crypto.randomUUID();
+    setMessages([]);
+    setInput("");
+    setIsSidebarOpen(false); // Optional: close sidebar on mobile
+    fetchSessions(); // Refresh list to show previous one
+  };
+
+  const handleLoadSession = async (sessionId: string) => {
+    try {
+      // Fetch history
+      const res = await fetch(`http://localhost:8000/v1/history/${sessionId}`);
+      if (res.ok) {
+        const data = await res.json();
+        setMessages(data);
+        sessionIdRef.current = sessionId;
+        setIsSidebarOpen(false); // Close sidebar on mobile
+      }
+    } catch (e) {
+      console.error("Failed to load session", e);
+    }
+  };
+
+  const handleDeleteSession = async (e: React.MouseEvent, sessionId: string) => {
+    e.stopPropagation(); // Prevent loading the session
+    if (!confirm("Delete this chat?")) return;
+
+    try {
+      await fetch(`http://localhost:8000/v1/history/${sessionId}`, {
+        method: "DELETE"
+      });
+
+      // Remove from local list
+      setSessions(prev => prev.filter(s => s.session_id !== sessionId));
+
+      // If deleted active session, start new chat
+      if (sessionIdRef.current === sessionId) {
+        handleNewChat();
+      }
+    } catch (e) {
+      console.error("Failed to delete session", e);
+    }
+    setOpenMenuSessionId(null);
+  };
+
+  const toggleMenu = (e: React.MouseEvent, sessionId: string) => {
+    e.stopPropagation();
+    setOpenMenuSessionId(openMenuSessionId === sessionId ? null : sessionId);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -45,6 +131,7 @@ export default function Home() {
           messages: [...messages, userMessage],
           max_tokens: 512,
           temperature: 0.7,
+          session_id: sessionIdRef.current, // Send session ID
         }),
       });
 
@@ -74,6 +161,10 @@ export default function Home() {
           return newMessages;
         });
       }
+
+      // After message is done, refresh session list so the new/updated session appears
+      fetchSessions();
+
     } catch (error) {
       console.error("Error:", error);
       setMessages((prev) => [
@@ -94,9 +185,17 @@ export default function Home() {
           isSidebarOpen ? "translate-x-0" : "-translate-x-full absolute h-full z-10"
         )}
       >
+        {/* App Title */}
+        <div className="flex items-center gap-2 px-2 mb-6 mt-2">
+          <div className="w-6 h-6 bg-white rounded-full flex items-center justify-center">
+            <div className="w-3 h-3 border-2 border-black rounded-full" />
+          </div>
+          <span className="font-bold text-lg tracking-tight">LocalGPT</span>
+        </div>
+
         <div className="flex justify-between items-center mb-4">
           <button
-            onClick={() => setMessages([])}
+            onClick={handleNewChat}
             className="flex-1 flex items-center gap-2 px-3 py-2 border border-white/20 rounded-md hover:bg-[#212121] transition-colors text-sm"
           >
             <Plus size={16} />
@@ -111,11 +210,45 @@ export default function Home() {
         </div>
 
         <div className="flex-1 overflow-y-auto">
-          <div className="text-xs font-semibold text-gray-500 mb-2 px-2">Today</div>
-          <button className="flex items-center gap-3 px-3 py-2 w-full text-left hover:bg-[#212121] rounded-md transition-colors text-sm truncate text-[#ECECEC]">
-            <MessageSquare size={16} />
-            <span className="truncate">New conversation</span>
-          </button>
+          <div className="text-xs font-semibold text-gray-500 mb-2 px-2">Recent</div>
+          {sessions.slice().reverse().map((session) => (
+            <div key={session.session_id} className="relative group">
+              <button
+                onClick={() => handleLoadSession(session.session_id)}
+                className={clsx(
+                  "flex items-center gap-3 px-3 py-2 w-full text-left hover:bg-[#212121] rounded-md transition-colors text-sm text-[#ECECEC]",
+                  session.session_id === sessionIdRef.current ? "bg-[#2F2F2F]" : ""
+                )}
+              >
+                <MessageSquare size={16} className="flex-shrink-0" />
+                <span className="truncate flex-1">{session.last_message || "New conversation"}</span>
+                {(session.session_id === sessionIdRef.current || openMenuSessionId === session.session_id) && (
+                  <div
+                    onClick={(e) => toggleMenu(e, session.session_id)}
+                    className="p-1 hover:text-white text-gray-400 rounded hover:bg-gray-600 transition-opacity"
+                  >
+                    <MoreHorizontal size={14} />
+                  </div>
+                )}
+              </button>
+
+              {/* Dropdown Menu */}
+              {openMenuSessionId === session.session_id && (
+                <div className="absolute right-0 top-full mt-1 w-32 bg-[#2F2F2F] border border-gray-700 rounded-md shadow-lg z-50 overflow-hidden">
+                  <button
+                    onClick={(e) => handleDeleteSession(e, session.session_id)}
+                    className="flex items-center gap-2 w-full px-3 py-2 text-sm text-red-400 hover:bg-[#424242] transition-colors"
+                  >
+                    <Trash2 size={14} />
+                    Delete
+                  </button>
+                </div>
+              )}
+            </div>
+          ))}
+          {sessions.length === 0 && (
+            <div className="px-3 py-2 text-sm text-gray-500">No history yet</div>
+          )}
         </div>
 
         {/* User Profile Area (Mock) */}
