@@ -12,8 +12,10 @@ LocalGPT is a private, on-device AI chat application that runs entirely on your 
 
 ## Demo
 
-https://github.com/Rohith1-p/on-device-chat/assets/demo.mp4
-<!-- Note: GitHub renders MP4 files in READMEs if they are hosted in the repo assets. If this link does not auto-expand, users can click to view. -->
+## Demo
+
+![LocalGPT Demo](assets/localGPT.png)
+
 
 ## Tech Stack
 
