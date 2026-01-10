@@ -10,6 +10,11 @@ LocalGPT is a private, on-device AI chat application that runs entirely on your 
 - **Modern UI**: A clean, responsive interface inspired by leading chat applications.
 - **No API Keys**: Run powerful LLMs without subscription fees.
 
+## Demo
+
+https://github.com/Rohith1-p/on-device-chat/assets/demo.mp4
+<!-- Note: GitHub renders MP4 files in READMEs if they are hosted in the repo assets. If this link does not auto-expand, users can click to view. -->
+
 ## Tech Stack
 
 - **Model**: `mlx-community/LFM2-1.2B-8bit` (Lightweight, fast, and capable)
